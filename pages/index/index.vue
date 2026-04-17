@@ -74,13 +74,13 @@
     </view>
 
     <!-- 今日报告 -->
-    <view v-if="hasTodayRecord" class="report-card">
+    <view v-if="hasTodayRecord" class="report-card report-card-clickable" @click="openRecordDetail">
       <view class="report-header">
         <text class="report-title">本次{{ lastRecord.type }}报告</text>
-        <text class="reset-btn" @click="resetToday">删除</text>
+        <text class="reset-btn" @click.stop="resetToday">删除</text>
       </view>
       
-      <!-- 【新增】入睡→起床时间线 -->
+      <!-- 入睡→起床时间线 -->
       <view class="time-line" style="display: flex; justify-content: space-around; margin-bottom: 15px; padding: 10px; background: rgba(33, 150, 243, 0.1); border-radius: 8px;">
         <view style="text-align: center;">
           <text style="font-size: 12px; color: var(--text-secondary);">🌙 入睡</text>
@@ -119,6 +119,86 @@
       </view>
     </view>
 
+    <!-- 睡眠记录详情弹窗 -->
+    <view v-if="showRecordDetail" class="modal-overlay" @click="showRecordDetail = false">
+      <view class="modal-content advice-modal" :class="themeClass" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">睡眠记录详情</text>
+          <text class="close-btn" @click="showRecordDetail = false">×</text>
+        </view>
+
+        <view class="modal-body advice-body">
+          <view class="time-line" style="display: flex; justify-content: space-around; margin-bottom: 15px; padding: 10px; background: rgba(33, 150, 243, 0.1); border-radius: 8px;">
+            <view style="text-align: center;">
+              <text style="font-size: 12px; color: var(--text-secondary);">🌙 入睡</text>
+              <text style="font-size: 16px; font-weight: bold; color: var(--text-primary);">
+                {{ lastRecord.sleepTimeStr || '--:--' }}
+              </text>
+            </view>
+            <view style="display: flex; align-items: center; color: var(--text-secondary);">
+              <text>→</text>
+            </view>
+            <view style="text-align: center;">
+              <text style="font-size: 12px; color: var(--text-secondary);">☀️ 起床</text>
+              <text style="font-size: 16px; font-weight: bold; color: var(--text-primary);">
+                {{ lastRecord.wakeTimeStr || '--:--' }}
+              </text>
+            </view>
+          </view>
+
+          <view class="report-grid">
+            <view class="report-item">
+              <text class="label">类型</text>
+              <text class="value">{{ lastRecord.type || '--' }}</text>
+            </view>
+            <view class="report-item">
+              <text class="label">时长</text>
+              <text class="value">{{ Math.floor(lastRecord.duration / 60) }}h {{ lastRecord.duration % 60 }}m</text>
+            </view>
+            <view class="report-item">
+              <text class="label">醒来</text>
+              <text class="value">{{ lastRecord.wakes }}次</text>
+            </view>
+            <view class="report-item">
+              <text class="label">翻身</text>
+              <text class="value">{{ lastRecord.turnOvers || 0 }}次</text>
+            </view>
+            <view class="report-item">
+              <text class="label">评分</text>
+              <text class="value score" :style="{ color: getScoreColor(lastRecord.score) }">{{ lastRecord.score }}</text>
+            </view>
+            <view class="report-item">
+              <text class="label">睡眠等级</text>
+              <text class="value">{{ lastRecord.level || '--' }}</text>
+            </view>
+          </view>
+
+          <view class="detail-ai-section">
+            <view class="detail-ai-header">
+              <text class="report-title">AI 建议</text>
+            </view>
+
+            <view v-if="aiLoading" class="loading-state" style="height: 70px;">
+              <view class="progress-container">
+                <view class="progress-bar" :style="{ width: progressStep + '%' }"></view>
+              </view>
+              <text class="loading-text">正在生成 AI 建议...</text>
+            </view>
+
+            <view v-else class="markdown-body detail-ai-content">
+              <div v-if="aiAdviceHtml" v-html="aiAdviceHtml"></div>
+              <text v-else-if="aiAdvice || lastRecord.aiAdvice" style="white-space: pre-wrap;">{{ aiAdvice || lastRecord.aiAdvice }}</text>
+              <text v-else>暂无 AI 建议</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="modal-footer">
+          <button class="btn-confirm" hover-class="btn-hover" @click="showRecordDetail = false">关闭</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 功能入口区 -->
     <view class="action-grid">
       <view class="action-item" @click="goToStats">
@@ -137,7 +217,7 @@
 	  <text class="tips-content">{{ currentTip || '睡眠不足会影响记忆力、注意力和情绪' }}</text>
 	</view>
 	
-    <!-- ================= 设置模态框 (修复版) ================= -->
+    <!-- ================= 设置模态框 ================= -->
     <view v-if="showSettings" class="modal-overlay" @click="closeSettings">
       <view class="modal-content settings-modal" :class="themeClass" @click.stop>
         <view class="modal-header">
@@ -237,7 +317,7 @@ function handleTipClick() {
 }
 
 // ================= 配置区域 =================
-const API_KEY = 'sk-bfsbrsldyyelpzptnerbobfvfzyvaqimvverfomvhwwthnln';
+const API_KEY = 'sk-nmucwgiloobtuyycffbsfmiyrpdlssqiobesmligicsdqpqz';
 const BASE_URL = 'https://api.siliconflow.cn/v1';
 const MODEL_NAME = 'deepseek-ai/DeepSeek-V3.2';
 const TARGET_SLEEP_MINUTES = 480; 
@@ -251,11 +331,11 @@ const sleepStartTime = ref(0);
 const timer = ref(null);
 const currentDuration = ref('00:00');
 const wakeCount = ref(0);
-const turnOverCount = ref(0);        // 【新增】翻身次数
-const accelerometerEnabled = ref(false); // 【新增】加速度计开关
-let turnOverDetector = null;         // 【新增】检测器实例
-const sleepTimeStr = ref('');      // 【新增】入睡时间显示
-const wakeTimeStr = ref('');       // 【新增】起床时间显示
+const turnOverCount = ref(0);        
+const accelerometerEnabled = ref(false); 
+let turnOverDetector = null;
+const sleepTimeStr = ref('');
+const wakeTimeStr = ref('');
 
 // 用户设置
 const minSleepMinutes = ref(20); 
@@ -277,6 +357,7 @@ const aiAdviceHtml = ref('');
 const showAiModal = ref(false);
 const progressStep = ref(0);
 const aiFetched = ref(false); 
+const showRecordDetail = ref(false);
 
 let markedLib = null;
 
@@ -316,7 +397,6 @@ onUnmounted(() => {
     timer.value = null;
   }
   
-  // 【关键修复】清理翻身检测器
   if (turnOverDetector) {
     turnOverDetector.stop();
     turnOverDetector = null;
@@ -338,7 +418,7 @@ async function initMarked() {
   }
 }
 
-// --- ✅ 修复后的主题切换函数 ---
+// --- 主题切换函数 ---
 function initTheme() {
   const settings = uni.getStorageSync(SETTINGS_KEY);
   if (settings) {
@@ -375,7 +455,6 @@ function initTheme() {
 function applyTheme(theme) {
   const isDark = theme === 'dark';
   
-  // 1. 核心：操作 DOM 类名 (H5 和 小程序 WebView 都有效)
   if (typeof document !== 'undefined') {
     const rootClass = isDark ? 'dark-mode' : 'light-mode';
     const oppositeClass = isDark ? 'light-mode' : 'dark-mode';
@@ -386,11 +465,10 @@ function applyTheme(theme) {
     document.documentElement.classList.remove(oppositeClass);
   }
 
-  // 2. 仅在非 H5 环境调用原生 API
   // #ifndef H5
   try {
     const bgColor = isDark ? '#121212' : '#f5f7fa';
-    const frontColor = isDark ? 'white' : 'black'; // 必须是小写
+    const frontColor = isDark ? 'white' : 'black'; 
 
     uni.setNavigationBarColor({
       frontColor: frontColor, 
@@ -563,7 +641,7 @@ function startSleep() {
   sleepStartTime.value = now;
   sleepTimeStr.value = formatTime(now, 'HH:mm');
   wakeCount.value = 0;
-  turnOverCount.value = 0;  //重置翻身计数
+  turnOverCount.value = 0;  
   
   uni.setStorageSync('sleep_start_time', now);
   uni.setStorageSync('sleep_wake_count', 0);
@@ -573,7 +651,7 @@ function startSleep() {
   
   startTimer();
   registerWakeListeners();
-  startTurnOverMonitoring();//启动床板翻身检测
+  startTurnOverMonitoring();
   
   uni.showToast({ title: '监测已开始', icon: 'success', duration: 1500 });
   
@@ -702,7 +780,6 @@ function finalizeSleep(endTime, durationMin, startTimeNum) {
     newDebt = currentDebt - nightlyBalance;
   }
   
-  // 【关键修复】记录对象 - 确保 sleepTimeStr 正确保存
   const record = {
     id: Date.now(), 
     date: todayStr, 
@@ -710,7 +787,6 @@ function finalizeSleep(endTime, durationMin, startTimeNum) {
     startTime: startTimeNum,
     endTime: endTime,
     
-    // 【关键】字段名必须一致
     sleepTimeStr: formatTime(startTimeNum, 'HH:mm'),
     wakeTimeStr: formatTime(endTime, 'HH:mm'),
     
@@ -736,9 +812,8 @@ function finalizeSleep(endTime, durationMin, startTimeNum) {
   uni.setStorageSync('sleep_last_end_time', endTime);
   saveToHistory(record);
   
-  // 【关键】更新 lastRecord 为当前 record（确保显示正确）
   sleepDebt.value = newDebt;
-  lastRecord.value = record;  // 直接使用刚创建的 record
+  lastRecord.value = record;
   hasTodayRecord.value = true;
   aiFetched.value = false;
   aiAdvice.value = '';
@@ -756,20 +831,20 @@ function stopSleepProcess(options = {}) {
 
   console.log('[Sleep] 开始停止监测流程');
   
-  // 1. 停止计时器
+  //停止计时器
   stopTimer();
   
-  // 2. 移除屏幕监听
+  //移除屏幕监听
   removeWakeListeners();
   
-  // 3. 【关键修复】停止翻身检测
+  //停止翻身检测
   if (turnOverDetector) {
     turnOverDetector.stop();
     turnOverDetector = null;
     console.log('[Sleep] 翻身检测器已清理');
   }
   
-  // 4. 【关键修复】确保加速度计完全停止
+  //确保加速度计完全停止
   uni.stopAccelerometer({
     success: () => {
       console.log('[Sleep] 加速度计已停止');
@@ -779,14 +854,14 @@ function stopSleepProcess(options = {}) {
     }
   });
   
-  // 5. 清理存储
+  //清理存储
   uni.removeStorageSync('sleep_wake_count');
   uni.removeStorageSync('sleep_turnover_count');
   if (clearSession) {
     clearMonitoringSessionStorage();
   }
   
-  // 6. 【关键修复】最后更新状态（确保 UI 刷新）
+  //最后更新状态
   isMonitoring.value = false;
   currentDuration.value = '00:00';
   accelerometerEnabled.value = false;
@@ -824,7 +899,6 @@ function clearSleepDebt() {
   });
 }
 
-// 替换原有的 calculateBaseScore 函数
 function calculateBaseScore(durationMinutes, wakes, turnOvers = 0) {
   // ========== 1. 时长评分 (50 分) ==========
   let durationScore = 0;
@@ -860,7 +934,7 @@ function calculateBaseScore(durationMinutes, wakes, turnOvers = 0) {
     }
   }
   
-  // ========== 3. 翻身评分 (20 分) 【新增】 ==========
+  // ========== 3. 翻身评分 (20 分) ==========
   let turnOverScore = 20;
   if (turnOvers > 0) {
     const expectedTurnOvers = Math.max(3, hours * 1.5);  // 期望翻身次数
@@ -954,6 +1028,18 @@ function resetToday() {
   });
 }
 
+function openRecordDetail() {
+  if (!hasTodayRecord.value) return;
+  showRecordDetail.value = true;
+
+  // 详情页无建议时自动生成
+  const hasAdvice = Boolean(lastRecord.value.aiAdvice || aiAdvice.value);
+  if (!hasAdvice && !aiLoading.value) {
+    aiFetched.value = false;
+    fetchAiSuggestion(lastRecord.value);
+  }
+}
+
 function formatDebt(minutes) {
   if (minutes === null || minutes === undefined) return '0 小时';
   if (Number(minutes) === 0) return '0 小时';
@@ -964,7 +1050,7 @@ function formatDebt(minutes) {
   return `${sign}${h}小时${m > 0 ? m + '分' : ''}`;
 }
 
-// 【新增】格式化时间为 HH:mm
+//格式化时间为 HH:mm
 function formatTime(timestamp, format = 'HH:mm') {
   if (!timestamp) return '--:--';
   const date = new Date(timestamp);
@@ -980,7 +1066,7 @@ function formatTime(timestamp, format = 'HH:mm') {
   return `${hours}:${minutes}`;
 }
 
-// 【新增】格式化时长（秒 → 小时 + 分钟）
+// 格式化时长（秒 → 小时 + 分钟）
 function formatDuration(seconds) {
   if (!seconds) return '0 分钟';
   const hours = Math.floor(seconds / 3600);
@@ -1109,16 +1195,16 @@ function saveAiAdviceToLocal(text) {
   } catch (e) {}
 }
 
-// ========== 床板翻身检测类 (修复版) ==========
+// ========== 床板翻身检测类 ==========
 class BedTurnOverDetector {
   constructor(callback) {
     this.callback = callback;
     
-    // 【修改】灵敏度
+    //灵敏度
     this.sensitivity = 0.05;
     
-    // 【修改】延长冷却时间 (5000 → 15000 毫秒)
-    this.cooldown = 15000;
+    //冷却时间
+    this.cooldown = 10000;
     
     this.dataBuffer = [];
     this.lastTurnTime = 0;
@@ -1126,7 +1212,6 @@ class BedTurnOverDetector {
     this.calibrated = false;
     this.enabled = false;
     
-    // 【关键修复】保存回调引用，用于正确移除监听
     this.boundHandleData = null;
   }
 
@@ -1156,7 +1241,7 @@ class BedTurnOverDetector {
   start() {
     if (this.enabled) return;
     
-    // 【关键修复】保存绑定后的回调引用
+    //保存绑定后的回调引用
     this.boundHandleData = this.handleData.bind(this);
     
     uni.startAccelerometer({
@@ -1211,7 +1296,7 @@ class BedTurnOverDetector {
     const maxVib = Math.max(...magnitudes);
     const avgVib = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
     
-    // 【修改】更严格的检测条件
+    // 更严格的检测条件
     if (maxVib > this.sensitivity && avgVib > this.sensitivity * 0.7) {
       this.lastTurnTime = now;
       console.log('[TurnOver] 检测到翻身，当前强度:', maxVib.toFixed(3));
@@ -1221,7 +1306,7 @@ class BedTurnOverDetector {
     return false;
   }
 
-  // 【关键修复】停止监测
+  // 停止监测
   stop() {
     if (!this.enabled) {
       console.log('[TurnOver] 监测未启动，跳过停止');
@@ -1230,7 +1315,7 @@ class BedTurnOverDetector {
     
     console.log('[TurnOver] 开始停止监测');
     
-    // 【关键修复】使用保存的回调引用移除监听
+    // 使用保存的回调引用移除监听
     if (this.boundHandleData) {
       uni.offAccelerometerChange(this.boundHandleData);
       this.boundHandleData = null;
@@ -1250,8 +1335,6 @@ class BedTurnOverDetector {
     this.dataBuffer = [];
   }
 }
-// ========== 修复结束 ==========
-// ========== 新增结束 ==========
 
 </script>
 
@@ -1284,7 +1367,7 @@ page.dark-mode {
   --btn-confirm-bg: #4a5568;
 }
 
-/* 强制 body 样式 (H5 端关键修复) */
+/* 强制 body 样式 */
 body.dark-mode {
   background-color: #121212;
   color: #e0e0e0;
@@ -1345,7 +1428,7 @@ body.light-mode {
   border: none; 
   cursor: pointer; 
   position: relative; 
-  z-index: 100; /* 确保按钮在最上层 */
+  z-index: 100;
   outline: none;
 }
 
@@ -1384,6 +1467,7 @@ button::after {
 
 /* ================= 报告与网格 ================= */
 .report-card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 20px; color: var(--text-primary); }
+.report-card-clickable { cursor: pointer; }
 .report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
 .report-title { font-weight: bold; font-size: 16px; color: var(--text-primary); }
 .reset-btn { font-size: 12px; color: #f44336; text-decoration: underline; }
@@ -1405,7 +1489,7 @@ button::after {
   display: flex; 
   align-items: center; 
   justify-content: center; 
-  z-index: 9999; /* 最高层级 */
+  z-index: 9999;
   backdrop-filter: blur(2px);
 }
 

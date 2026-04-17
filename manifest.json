@@ -2,8 +2,8 @@
     "name" : "SleepHaven",
     "appid" : "__UNI__19B6AF9",
     "description" : "一个记录你睡眠时长和质量的App",
-    "versionName" : "1.0.7",
-    "versionCode" : 107,
+    "versionName" : "1.0.8",
+    "versionCode" : 108,
     "transformPx" : false,
     "app-plus" : {
         /* 5+App特有相关 */
