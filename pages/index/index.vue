@@ -31,7 +31,7 @@
       <text class="monitoring-text">监测进行中...</text>
       <text class="monitoring-timer">{{ currentDuration }}</text>
       
-      <!-- 【新增】入睡时间显示 -->
+      <!-- 入睡时间显示 -->
       <text class="small-hint" style="color: #2196f3;">
         🌙 入睡时间：{{ sleepTimeStr || '--:--' }}
       </text>
@@ -74,29 +74,10 @@
     </view>
 
     <!-- 今日报告 -->
-    <view v-if="hasTodayRecord" class="report-card">
+    <view v-if="hasTodayRecord" class="report-card" @click="showAISuggestionModal">
       <view class="report-header">
-        <text class="report-title">本次{{ lastRecord.type }}报告</text>
+        <text class="report-title">本次睡眠报告</text>
         <text class="reset-btn" @click="resetToday">删除</text>
-      </view>
-      
-      <!-- 【新增】入睡→起床时间线 -->
-      <view class="time-line" style="display: flex; justify-content: space-around; margin-bottom: 15px; padding: 10px; background: rgba(33, 150, 243, 0.1); border-radius: 8px;">
-        <view style="text-align: center;">
-          <text style="font-size: 12px; color: var(--text-secondary);">🌙 入睡</text>
-          <text style="font-size: 16px; font-weight: bold; color: var(--text-primary);">
-            {{ lastRecord.sleepTimeStr || '--:--' }}
-          </text>
-        </view>
-        <view style="display: flex; align-items: center; color: var(--text-secondary);">
-          <text>→</text>
-        </view>
-        <view style="text-align: center;">
-          <text style="font-size: 12px; color: var(--text-secondary);">☀️ 起床</text>
-          <text style="font-size: 16px; font-weight: bold; color: var(--text-primary);">
-            {{ lastRecord.wakeTimeStr || '--:--' }}
-          </text>
-        </view>
       </view>
       
       <view class="report-grid">
@@ -137,7 +118,7 @@
 	  <text class="tips-content">{{ currentTip || '睡眠不足会影响记忆力、注意力和情绪' }}</text>
 	</view>
 	
-    <!-- ================= 设置模态框 (修复版) ================= -->
+    <!-- ================= 设置模态框 ================= -->
     <view v-if="showSettings" class="modal-overlay" @click="closeSettings">
       <view class="modal-content settings-modal" :class="themeClass" @click.stop>
         <view class="modal-header">
@@ -236,7 +217,7 @@ onMounted(async () => {
   loadData();
   checkTodayRecord();
   initTheme();
-  initTip(); // 初始化睡眠小贴士
+  initTip();
   
   if (isMonitoring.value) {
     startTimer();
@@ -248,11 +229,10 @@ function handleTipClick() {
 }
 
 // ================= 配置区域 =================
-const API_KEY = 'sk-bfsbrsldyyelpzptnerbobfvfzyvaqimvverfomvhwwthnln';
+const API_KEY = 'sk-nmucwgiloobtuyycffbsfmiyrpdlssqiobesmligicsdqpqz';
 const BASE_URL = 'https://api.siliconflow.cn/v1';
 const MODEL_NAME = 'deepseek-ai/DeepSeek-V3.2';
 const TARGET_SLEEP_MINUTES = 480; 
-// ===========================================
 
 // --- 状态变量 ---
 const isMonitoring = ref(false);
@@ -276,8 +256,15 @@ const systemTheme = ref('light');
 
 // 数据变量
 const sleepDebt = ref(0); 
-const lastRecord = ref({
-  score: 0, duration: 0, wakes: 0, turnOvers: 0, date: '', level: '未知', type: '夜间睡眠', aiAdvice: ''
+const lastRecord = ref({ 
+  score: 0, 
+  duration: 0, 
+  wakes: 0, 
+  turnOvers: 0, 
+  date: '', 
+  level: '未知', 
+  type: '夜间睡眠', 
+  aiAdvice: '',
 });
 
 // AI 状态
@@ -312,7 +299,6 @@ onUnmounted(() => {
     timer.value = null;
   }
   
-  // 【关键修复】清理翻身检测器
   if (turnOverDetector) {
     turnOverDetector.stop();
     turnOverDetector = null;
@@ -334,7 +320,7 @@ async function initMarked() {
   }
 }
 
-// --- ✅ 修复后的主题切换函数 ---
+// --- 主题切换函数 ---
 function initTheme() {
   const storedTheme = uni.getStorageSync('theme_mode');
   if (storedTheme) themeMode.value = storedTheme;
@@ -357,7 +343,6 @@ function initTheme() {
 function applyTheme(theme) {
   const isDark = theme === 'dark';
   
-  // 1. 核心：操作 DOM 类名 (H5 和 小程序 WebView 都有效)
   if (typeof document !== 'undefined') {
     const rootClass = isDark ? 'dark-mode' : 'light-mode';
     const oppositeClass = isDark ? 'light-mode' : 'dark-mode';
@@ -368,11 +353,10 @@ function applyTheme(theme) {
     document.documentElement.classList.remove(oppositeClass);
   }
 
-  // 2. 仅在非 H5 环境调用原生 API
   // #ifndef H5
   try {
     const bgColor = isDark ? '#121212' : '#f5f7fa';
-    const frontColor = isDark ? 'white' : 'black'; // 必须是小写
+    const frontColor = isDark ? 'white' : 'black'; 
 
     uni.setNavigationBarColor({
       frontColor: frontColor, 
@@ -453,20 +437,33 @@ function getScoreColor(score) {
 function loadData() {
   try {
     sleepDebt.value = Number(uni.getStorageSync('sleep_debt')) || 0;
+    
     const storedMin = uni.getStorageSync('min_sleep_minutes');
     minSleepMinutes.value = storedMin ? Number(storedMin) : 20;
     tempMinMinutes.value = String(minSleepMinutes.value);
     
     const storedStart = uni.getStorageSync('sleep_start_time');
     if (storedStart) {
-      isMonitoring.value = true;
-      sleepStartTime.value = Number(storedStart);
-      sleepTimeStr.value = formatTime(Number(storedStart), 'HH:mm');// 【新增】恢复入睡时间显示
-      wakeCount.value = 0;
-      turnOverCount.value = Number(uni.getStorageSync('sleep_turnover_count')) || 0;
+      const startTimeNum = Number(storedStart);
+      const now = Date.now();
+      
+      if (now - startTimeNum > 24 * 60 * 60 * 1000) {
+        console.warn('[LoadData] 检测到过期的开始时间，已清理');
+        uni.removeStorageSync('sleep_start_time');
+        isMonitoring.value = false;
+      } else {
+        isMonitoring.value = true;
+        sleepStartTime.value = startTimeNum;
+        
+        sleepTimeStr.value = formatTime(startTimeNum, 'HH:mm'); 
+        
+        wakeCount.value = Number(uni.getStorageSync('sleep_wake_count')) || 0;
+        turnOverCount.value = Number(uni.getStorageSync('sleep_turnover_count')) || 0;
+      }
     }
-  } catch (e) { 
-    console.error('Load data error:', e); 
+  } catch (e) {
+    console.error('Load data error:', e);
+    isMonitoring.value = false;
   }
 }
 
@@ -476,26 +473,24 @@ function startSleep() {
   sleepStartTime.value = now;
   sleepTimeStr.value = formatTime(now, 'HH:mm');
   wakeCount.value = 0;
-  turnOverCount.value = 0;  // 【新增】重置翻身计数
+  turnOverCount.value = 0;
   
   uni.setStorageSync('sleep_start_time', now);
   uni.setStorageSync('sleep_wake_count', 0);
-  uni.setStorageSync('sleep_turnover_count', 0);  // 【新增】
+  uni.setStorageSync('sleep_turnover_count', 0);
   
   startTimer();
   registerWakeListeners();
-  startTurnOverMonitoring();// 【新增】启动床板翻身检测
+  startTurnOverMonitoring();
   
   uni.showToast({ title: '监测已开始', icon: 'success', duration: 1500 });
   
   console.log('[Sleep] 监测已启动，入睡时间:', sleepTimeStr.value);
 }
 
-// 【新增】启动翻身监测
 async function startTurnOverMonitoring() {
   console.log('[TurnOver] 开始启动翻身监测');
   
-  // 清理旧实例
   if (turnOverDetector) {
     turnOverDetector.stop();
     turnOverDetector = null;
@@ -553,7 +548,6 @@ function handleEndSleepClick() {
     return;
   }
   
-  // 【关键修复】先停止监测，再显示确认弹窗
   stopSleepProcess();
   
   uni.showModal({
@@ -567,7 +561,6 @@ function handleEndSleepClick() {
         finalizeSleep(endTime, durationMin);
       } else {
         console.log('[Sleep] 用户取消，重新开始监测');
-        // 用户取消，恢复监测状态
         isMonitoring.value = true;
         startTimer();
         registerWakeListeners();
@@ -580,7 +573,6 @@ function handleEndSleepClick() {
 function finalizeSleep(endTime, durationMin) {
   console.log('[Finalize] 开始结束睡眠');
   
-  // 【关键修复】在清空存储前获取 startTime！
   const startTime = uni.getStorageSync('sleep_start_time');
   const startTimeNum = Number(startTime);
   
@@ -618,25 +610,24 @@ function finalizeSleep(endTime, durationMin) {
     newDebt = sleepDebt.value - nightlyBalance;
   }
   
-  // 【关键修复】记录对象 - 确保 sleepTimeStr 正确保存
+  //记录对象
   const record = {
-    id: Date.now(), 
-    date: todayStr, 
-    timestamp: endTime, 
+    id: Date.now(),
+    date: todayStr,
+    timestamp: endTime,
     startTime: startTimeNum,
     endTime: endTime,
     
-    // 【关键】字段名必须一致
-    sleepTimeStr: formatTime(startTimeNum, 'HH:mm'),
-    wakeTimeStr: formatTime(endTime, 'HH:mm'),
+    sleepTimeStr: formatTime(startTimeNum, 'HH:mm'), 
+    wakeTimeStr: formatTime(endTime, 'HH:mm'), 
     
-    duration: durationMin, 
+    duration: durationMin,
     wakes: wakeCount.value,
     turnOvers: turnOverCount.value,
-    score: scoreResult.totalScore, 
-    level: scoreResult.level, 
+    score: scoreResult.totalScore,
+    level: scoreResult.level,
     debt: newDebt,
-    type: recordType, 
+    type: recordType,
     aiAdvice: ''
   };
   
@@ -651,9 +642,8 @@ function finalizeSleep(endTime, durationMin) {
   uni.setStorageSync('sleep_debt', newDebt);
   saveToHistory(record);
   
-  // 【关键】更新 lastRecord 为当前 record（确保显示正确）
   sleepDebt.value = newDebt;
-  lastRecord.value = record;  // 直接使用刚创建的 record
+  lastRecord.value = record;  
   hasTodayRecord.value = true;
   aiFetched.value = false;
   aiAdvice.value = '';
@@ -662,7 +652,7 @@ function finalizeSleep(endTime, durationMin) {
   // 显示提示
   uni.showToast({ title: '记录成功', icon: 'success' });
   
-  // 停止监测流程（在保存记录之后！）
+  // 停止监测流程
   stopSleepProcess();
   
   // 延迟获取 AI 建议
@@ -671,35 +661,20 @@ function finalizeSleep(endTime, durationMin) {
 
 function stopSleepProcess() {
   console.log('[Sleep] 开始停止监测流程');
-  
-  // 1. 停止计时器
   stopTimer();
-  
-  // 2. 移除屏幕监听
   removeWakeListeners();
-  
-  // 3. 【关键修复】停止翻身检测
   if (turnOverDetector) {
     turnOverDetector.stop();
     turnOverDetector = null;
     console.log('[Sleep] 翻身检测器已清理');
   }
-  
-  // 4. 【关键修复】确保加速度计完全停止
   uni.stopAccelerometer({
-    success: () => {
-      console.log('[Sleep] 加速度计已停止');
-    },
-    fail: (err) => {
-      console.error('[Sleep] 加速度计停止失败', err);
-    }
+    success: () => { console.log('[Sleep] 加速度计已停止'); },
+    fail: (err) => { console.error('[Sleep] 加速度计停止失败', err); }
   });
-  
-  // 5. 清理存储
+  uni.removeStorageSync('sleep_start_time'); 
   uni.removeStorageSync('sleep_wake_count');
   uni.removeStorageSync('sleep_turnover_count');
-  
-  // 6. 【关键修复】最后更新状态（确保 UI 刷新）
   isMonitoring.value = false;
   currentDuration.value = '00:00';
   accelerometerEnabled.value = false;
@@ -737,7 +712,6 @@ function clearSleepDebt() {
   });
 }
 
-// 替换原有的 calculateBaseScore 函数
 function calculateBaseScore(durationMinutes, wakes, turnOvers = 0) {
   // ========== 1. 时长评分 (50 分) ==========
   let durationScore = 0;
@@ -773,7 +747,7 @@ function calculateBaseScore(durationMinutes, wakes, turnOvers = 0) {
     }
   }
   
-  // ========== 3. 翻身评分 (20 分) 【新增】 ==========
+  // ========== 3. 翻身评分 (20 分) ==========
   let turnOverScore = 20;
   if (turnOvers > 0) {
     const expectedTurnOvers = Math.max(3, hours * 1.5);  // 期望翻身次数
@@ -824,12 +798,24 @@ function checkTodayRecord() {
     if (recordStr) {
       const record = JSON.parse(recordStr);
       const today = new Date().toLocaleDateString();
+      
       if (record.date === today) {
         hasTodayRecord.value = true;
-        lastRecord.value = record;
+        const sleepTimeDisplay = record.startTime ? formatTime(record.startTime) : '--:--';
+        const wakeTimeDisplay = record.endTime ? formatTime(record.endTime) : '--:--';
+      
+        lastRecord.value = {
+          ...record,
+          sleepTimeStr: sleepTimeDisplay,
+          wakeTimeStr: wakeTimeDisplay
+        };
+        
         sleepDebt.value = record.debt || 0;
-        sleepTimeStr.value = record.sleepTimeStr || formatTime(record.startTime);// 【新增】恢复时间显示
-        wakeTimeStr.value = record.wakeTimeStr || formatTime(record.endTime);
+        
+        // 同步到页面显示变量
+        sleepTimeStr.value = sleepTimeDisplay;
+        wakeTimeStr.value = wakeTimeDisplay;
+        
         if (record.aiAdvice) {
           aiAdvice.value = record.aiAdvice;
           aiAdviceHtml.value = parseMarkdown(aiAdvice.value);
@@ -839,8 +825,9 @@ function checkTodayRecord() {
         hasTodayRecord.value = false;
       }
     }
-  } catch (e) { 
-    hasTodayRecord.value = false; 
+  } catch (e) {
+    console.error('Report Load Error:', e);
+    hasTodayRecord.value = false;
   }
 }
 
@@ -876,7 +863,7 @@ function formatDebt(minutes) {
   return `${sign}${h}小时${m > 0 ? m + '分' : ''}`;
 }
 
-// 【新增】格式化时间为 HH:mm
+//格式化时间为 HH:mm
 function formatTime(timestamp, format = 'HH:mm') {
   if (!timestamp) return '--:--';
   const date = new Date(timestamp);
@@ -892,7 +879,7 @@ function formatTime(timestamp, format = 'HH:mm') {
   return `${hours}:${minutes}`;
 }
 
-// 【新增】格式化时长（秒 → 小时 + 分钟）
+//格式化时长（秒 → 小时 + 分钟）
 function formatDuration(seconds) {
   if (!seconds) return '0 分钟';
   const hours = Math.floor(seconds / 3600);
@@ -988,8 +975,18 @@ function fetchAiSuggestion(record) {
 }
 
 function showAISuggestionModal() {
-  if (!hasTodayRecord.value) return;
-  if (!aiFetched.value && !aiLoading.value) fetchAiSuggestion(lastRecord.value);
+  if (!hasTodayRecord.value) {
+    uni.showToast({ title: '暂无记录', icon: 'none' });
+    return;
+  }
+
+  if (!aiFetched.value && !aiLoading.value) {
+    console.log('[Modal] 首次点击，开始获取 AI 建议...');
+    fetchAiSuggestion(lastRecord.value);
+  } else {
+    console.log('[Modal] 内容已存在，直接显示弹窗');
+  }
+
   showAiModal.value = true;
 }
 
@@ -1017,16 +1014,16 @@ function saveAiAdviceToLocal(text) {
   } catch (e) {}
 }
 
-// ========== 床板翻身检测类 (修复版) ==========
+// ========== 床板翻身检测类 ==========
 class BedTurnOverDetector {
   constructor(callback) {
     this.callback = callback;
     
-    // 【修改】灵敏度
+    //灵敏度
     this.sensitivity = 0.05;
     
-    // 【修改】延长冷却时间 (5000 → 15000 毫秒)
-    this.cooldown = 15000;
+    //冷却时间
+    this.cooldown = 10000;
     
     this.dataBuffer = [];
     this.lastTurnTime = 0;
@@ -1034,7 +1031,6 @@ class BedTurnOverDetector {
     this.calibrated = false;
     this.enabled = false;
     
-    // 【关键修复】保存回调引用，用于正确移除监听
     this.boundHandleData = null;
   }
 
@@ -1064,7 +1060,6 @@ class BedTurnOverDetector {
   start() {
     if (this.enabled) return;
     
-    // 【关键修复】保存绑定后的回调引用
     this.boundHandleData = this.handleData.bind(this);
     
     uni.startAccelerometer({
@@ -1119,7 +1114,7 @@ class BedTurnOverDetector {
     const maxVib = Math.max(...magnitudes);
     const avgVib = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
     
-    // 【修改】更严格的检测条件
+    //检测条件
     if (maxVib > this.sensitivity && avgVib > this.sensitivity * 0.7) {
       this.lastTurnTime = now;
       console.log('[TurnOver] 检测到翻身，当前强度:', maxVib.toFixed(3));
@@ -1129,7 +1124,7 @@ class BedTurnOverDetector {
     return false;
   }
 
-  // 【关键修复】停止监测
+  //停止监测
   stop() {
     if (!this.enabled) {
       console.log('[TurnOver] 监测未启动，跳过停止');
@@ -1138,7 +1133,7 @@ class BedTurnOverDetector {
     
     console.log('[TurnOver] 开始停止监测');
     
-    // 【关键修复】使用保存的回调引用移除监听
+    //使用保存的回调引用移除监听
     if (this.boundHandleData) {
       uni.offAccelerometerChange(this.boundHandleData);
       this.boundHandleData = null;
@@ -1158,8 +1153,6 @@ class BedTurnOverDetector {
     this.dataBuffer = [];
   }
 }
-// ========== 修复结束 ==========
-// ========== 新增结束 ==========
 
 </script>
 
